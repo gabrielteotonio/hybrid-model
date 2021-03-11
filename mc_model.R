@@ -79,7 +79,7 @@ svm_model <- function(data, lags = 2:24, method = "mnl") {
     result_n_lags <- 0
     part_ml <- data[,2:22]
     part_mnl <- data[,23:43]
-    
+    #print("test")
     for (i in lags) {
       
       model <- tune(svm, 
@@ -231,19 +231,20 @@ MC <- function(data, mc_model = "tbr") {
     print("MC")
     for (j in 1:20) {
       
-      lags <- c(1:20)
       comb_ml <- data.frame(ml = as.vector(arima_model$fitted)) %>% 
         as_tibble() %>% 
         mutate_at(vars(ml), .funs=lag_functions_ml)
       
-      comb_mnl <- data.frame(mnl = c(rep(0, mnl_model$best_n_lags), predict(mnl_model$best_model))) %>% 
+      lag_dif <- length(arima_model$fitted) - length(predict(mnl_model$best_model))
+      comb_mnl <- data.frame(mnl = c(rep(0, lag_dif), predict(mnl_model$best_model))) %>% 
         as_tibble() %>% 
         mutate_at(vars(mnl), .funs=lag_functions_mnl)
       
+      # error here
       data_comb <- bind_cols(arima_model$x, comb_ml, comb_mnl) %>% 
         rename(y = ...1)
-      
-      mc_model <- svr_model(data_comb, lags = 1:21, method = "mc")
+  
+      mc_model <- svm_model(data_comb, lags = 1:21, method = "mc")
       
     }
   }
@@ -253,9 +254,26 @@ MC <- function(data, mc_model = "tbr") {
               "mc_model" = mc_model))
   
 }
-
+test_mc <- MC(data)
 pred <- ts(predict(test_mc$mc_model$best_model), 
            start = 1821, 
            end = 1934,
            frequency = 1)
-plot(data); lines(pred, col = "red")
+plot(data, type="l", pch=35, col="black", xlab="Value", ylab="Time", main= "Lynx data (tbr)")
+lines(pred, pch=35, col="red", type="l", lty=2)
+legend(1835, 6000, legend=c("Observed", "Fitted"),
+       col=c("black", "red"), lty=1:2, cex=0.8)
+
+
+test_mc_svr <- MC(data, mc_model = "svr")
+pred_svr <- ts(predict(test_mc_svr$mc_model$best_model), 
+               start = 1821, 
+               end = 1934,
+               frequency = 1)
+plot(data, type="l", pch=35, col="black", xlab="Value", ylab="Time", main= "Lynx data (svr)")
+lines(pred_svr, pch=35, col="red", type="l", lty=2)
+legend(1835, 6000, legend=c("Observed", "Fitted"),
+       col=c("black", "red"), lty=1:2, cex=0.8)
+
+
+par(mfrow=c(1,2))
