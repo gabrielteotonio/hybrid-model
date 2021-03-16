@@ -48,7 +48,7 @@ svm_model <- function(data, lags = 2:24, method = "mnl") {
     result_n_lags <- 0
     
     for (i in lags) {
-      
+      print(i)
       model <- tune(svm, 
                     as.formula(paste(colnames(data)[1], "~",
                                      paste(colnames(data)[c(2:i)], collapse = "+"),
@@ -79,9 +79,9 @@ svm_model <- function(data, lags = 2:24, method = "mnl") {
     result_n_lags <- 0
     part_ml <- data[,2:22]
     part_mnl <- data[,23:43]
-    #print("test")
+   
     for (i in lags) {
-      
+      print(i)
       model <- tune(svm, 
                     as.formula(paste(colnames(data)[1], "~",
                                      paste0(paste(colnames(part_ml)[c(1:i)], collapse = "+"), 
@@ -120,7 +120,7 @@ tbr_model <- function(data, lags = 2:24, method = "mnl") {
     result_n_lags <- 0
     
     for (i in lags) {
-      
+      print(i)
       tree <- rpart(as.formula(paste(colnames(data)[1], "~",
                                       paste(colnames(data)[c(2:i)], collapse = "+"),
                                       sep = ""
@@ -151,7 +151,7 @@ tbr_model <- function(data, lags = 2:24, method = "mnl") {
     part_mnl <- data[,23:43]
     
     for (i in lags) {
-      
+      print(i)
       tree <- rpart(as.formula(paste(colnames(data)[1], "~",
                                      paste0(paste(colnames(part_ml)[c(1:i)], collapse = "+"), 
                                             "+", 
@@ -206,22 +206,20 @@ MC <- function(data, mc_model = "tbr") {
     
     # MC -----
     print("MC")
-    for (j in 1:20) {
-      
-      comb_ml <- data.frame(ml = as.vector(arima_model$fitted)) %>% 
-        as_tibble() %>% 
-        mutate_at(vars(ml), .funs=lag_functions_ml)
-      
-      comb_mnl <- data.frame(mnl = c(rep(0, mnl_model$best_n_lags), predict(mnl_model$best_model))) %>% 
-        as_tibble() %>% 
-        mutate_at(vars(mnl), .funs=lag_functions_mnl)
-      
-      data_comb <- bind_cols(arima_model$x, comb_ml, comb_mnl) %>% 
-        rename(y = ...1)
+    comb_ml <- data.frame(ml = as.vector(arima_model$fitted)) %>% 
+      as_tibble() %>% 
+      mutate_at(vars(ml), .funs=lag_functions_ml)
+    
+    comb_mnl <- data.frame(mnl = c(rep(0, mnl_model$best_n_lags), predict(mnl_model$best_model))) %>% 
+      as_tibble() %>% 
+      mutate_at(vars(mnl), .funs=lag_functions_mnl)
+    
+    data_comb <- bind_cols(arima_model$x, comb_ml, comb_mnl) %>% 
+      rename(y = ...1)
 
-      mc_model <- tbr_model(data_comb, lags = 1:21, method = "mc")
+    mc_model <- tbr_model(data_comb, lags = 1:21, method = "mc")
       
-    }
+    
   } else {
     # MNL -----
     print("MNL")
@@ -229,24 +227,22 @@ MC <- function(data, mc_model = "tbr") {
     
     # MC -----
     print("MC")
-    for (j in 1:20) {
+    comb_ml <- data.frame(ml = as.vector(arima_model$fitted)) %>% 
+      as_tibble() %>% 
+      mutate_at(vars(ml), .funs=lag_functions_ml)
+    
+    lag_dif <- length(arima_model$fitted) - length(predict(mnl_model$best_model))
+    comb_mnl <- data.frame(mnl = c(rep(0, lag_dif), predict(mnl_model$best_model))) %>% 
+      as_tibble() %>% 
+      mutate_at(vars(mnl), .funs=lag_functions_mnl)
+    
+    # error here
+    data_comb <- bind_cols(arima_model$x, comb_ml, comb_mnl) %>% 
+      rename(y = ...1)
+
+    mc_model <- svm_model(data_comb, lags = 1:21, method = "mc")
       
-      comb_ml <- data.frame(ml = as.vector(arima_model$fitted)) %>% 
-        as_tibble() %>% 
-        mutate_at(vars(ml), .funs=lag_functions_ml)
-      
-      lag_dif <- length(arima_model$fitted) - length(predict(mnl_model$best_model))
-      comb_mnl <- data.frame(mnl = c(rep(0, lag_dif), predict(mnl_model$best_model))) %>% 
-        as_tibble() %>% 
-        mutate_at(vars(mnl), .funs=lag_functions_mnl)
-      
-      # error here
-      data_comb <- bind_cols(arima_model$x, comb_ml, comb_mnl) %>% 
-        rename(y = ...1)
-  
-      mc_model <- svm_model(data_comb, lags = 1:21, method = "mc")
-      
-    }
+    
   }
   
   return(list("arima_model" = arima_model,
