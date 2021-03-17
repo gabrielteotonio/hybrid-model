@@ -181,7 +181,7 @@ tbr_model <- function(data, lags = 2:24, method = "mnl") {
 }
 
 # MC algorithm -----
-MC <- function(data, mc_model = "tbr") {
+MC_trainning <- function(data, mc_model = "tbr") {
   
   arima_order <- c()
   
@@ -236,7 +236,6 @@ MC <- function(data, mc_model = "tbr") {
       as_tibble() %>% 
       mutate_at(vars(mnl), .funs=lag_functions_mnl)
     
-    # error here
     data_comb <- bind_cols(arima_model$x, comb_ml, comb_mnl) %>% 
       rename(y = ...1)
 
@@ -250,26 +249,74 @@ MC <- function(data, mc_model = "tbr") {
               "mc_model" = mc_model))
   
 }
-test_mc <- MC(data)
-pred <- ts(predict(test_mc$mc_model$best_model), 
-           start = 1821, 
-           end = 1934,
-           frequency = 1)
-plot(data, type="l", pch=35, col="black", xlab="Value", ylab="Time", main= "Lynx data (tbr)")
-lines(pred, pch=35, col="red", type="l", lty=2)
-legend(1835, 6000, legend=c("Observed", "Fitted"),
-       col=c("black", "red"), lty=1:2, cex=0.8)
 
-
-test_mc_svr <- MC(data, mc_model = "svr")
-pred_svr <- ts(predict(test_mc_svr$mc_model$best_model), 
-               start = 1821, 
-               end = 1934,
-               frequency = 1)
-plot(data, type="l", pch=35, col="black", xlab="Value", ylab="Time", main= "Lynx data (svr)")
-lines(pred_svr, pch=35, col="red", type="l", lty=2)
-legend(1835, 6000, legend=c("Observed", "Fitted"),
-       col=c("black", "red"), lty=1:2, cex=0.8)
-
-
-par(mfrow=c(1,2))
+# MC testing -----
+MC_testing <- function(data, mc_trainning_object) {
+  
+  arima_model <- mc_trainning_object$arima_model
+  mnl_model <- mc_trainning_object$mnl_model
+  mc_model <- mc_trainning_object$mc_model
+  mnl_forecast <- as_tibble()
+  
+  # Arima forecast -----
+  new_fit <- Arima(c(arima_model$x, data), model = arima_model)
+  arima_forecast_one_step <- tail(fitted(new_fit), n = length(data))
+  arima_forecast <- fitted(new_fit)
+  
+  # MNL forecast -----
+  residuals <- data.frame(y = as.matrix(arima_model$residuals), 
+                          date = time(arima_model$residuals)) %>% 
+    as_tibble() %>% 
+    mutate_at(vars(y), .funs=lag_functions) %>% 
+    select(-date)
+  
+  best_n_lags_mnl <- mnl_model$best_n_lags
+  new_data <- tail(residuals, n = 1)[1, 1:best_n_lags_mnl]
+  for (i in 1:length(data)) {
+    
+    mnl_forecast_one_step <- predict(mnl_model$best_model, new_data)
+    append_data <- (c(mnl_forecast_one_step, 
+                      new_data) %>% 
+                      as_tibble())
+    append_data <- append_data[, 1:(length(append_data)-1)]
+    names(append_data) <- names(new_data)
+    mnl_forecast <- bind_rows(mnl_forecast,
+                              append_data)
+    new_data <- tail(mnl_forecast, n = 1)[1, 1:best_n_lags_mnl]
+  
+  }
+  
+  # MC forecast -----
+  # lags -----
+  best_n_lags_mc <- mc_model$best_n_lags
+  lags_test <- c(1:best_n_lags_mc)
+  
+  lag_names_ml_test <- glue('lag_{str_pad(lags_test, nchar(max(lags)), pad = "0")}_ml')
+  lag_names_mnl_test <- glue('lag_{str_pad(lags_test, nchar(max(lags)), pad = "0")}_mnl')
+  
+  lag_functions_ml_test <-
+    map(lags_test, ~ eval(parse(text=glue("~ dplyr::lag(.x, {.x})")))) %>%
+    set_names(lag_names_ml_test)
+  
+  lag_functions_mnl_test <-
+    map(lags_test, ~ eval(parse(text=glue("~ dplyr::lag(.x, {.x})")))) %>%
+    set_names(lag_names_mnl_test)
+  
+  # combined forecasts -----
+  comb_ml_test <- data.frame(ml = as.vector(arima_forecast)) %>% 
+    as_tibble() %>% 
+    mutate_at(vars(ml), .funs=lag_functions_ml_test)
+  
+  lag_dif_test <- length(arima_model$fitted) - length(predict(mnl_model$best_model))
+  comb_mnl_test <- data.frame(mnl = c(rep(0, lag_dif_test), predict(mnl_model$best_model), mnl_forecast$y)) %>% 
+    as_tibble() %>% 
+    mutate_at(vars(mnl), .funs=lag_functions_mnl_test)
+  
+  data_comb_test <- bind_cols(comb_ml_test, comb_mnl_test)
+  data_comb_test <- tail(data_comb_test, n = length(data))
+  mc_forecast <- predict(mc_model$best_model, data_comb_test)
+  
+  return(list("arima_forecast" = arima_forecast_one_step,
+              "mnl_forecast" = mnl_forecast$y,
+              "mc_forecast" = mc_forecast))
+}
