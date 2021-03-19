@@ -11,7 +11,7 @@ model <- tune(randomForest,
 )
 ######
 data <- subset(data, end = 100)
-mc_trainning <- MC_trainning(data)
+mc_trainning <- MC_trainning(data, mc_model = "svr")
 
 data <- lynx
 data <- subset(data, start = 101)

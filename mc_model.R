@@ -11,11 +11,6 @@ library(rpart)
 library(MLmetrics)
 library(glue)
 
-# Data -----
-data("lynx")
-data <- lynx
-
-
 # Aux. functions -----
 
 # Lags -----
