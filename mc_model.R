@@ -272,7 +272,7 @@ MC_testing <- function(data, mc_trainning_object) {
     mnl_forecast_one_step <- predict(mnl_model$best_model, new_data)
     append_data <- (c(mnl_forecast_one_step, 
                       new_data) %>% 
-                      as_tibble())
+                      as_tibble(.name_repair = ~names(c("", new_data))))
     append_data <- append_data[, 1:(length(append_data)-1)]
     names(append_data) <- names(new_data)
     mnl_forecast <- bind_rows(mnl_forecast,
